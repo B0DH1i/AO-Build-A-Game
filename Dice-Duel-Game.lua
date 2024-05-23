@@ -1,3 +1,4 @@
+-- Game Variables
 successText = 'Success'
 failedText = "Failed"
 rankList = rankList or {}
@@ -5,8 +6,10 @@ pointsList = pointsList or {}
 members = members or {}
 gameTimeTag = gameTimeTag or ""
 cards = { "Bonus 10", "Bonus 20", "Bonus 30", "Extra Roll", "Lose 10", "Lose 20", "Lose 30", "Swap Points", "Double Points" }
-turnOrder = turnOrder or {}
-currentTurnIndex = currentTurnIndex or 1
+turnOrder = turnOrder or {}  -- Oyuncuların sırası
+currentTurnIndex = currentTurnIndex or 1  -- Şu anki oyuncunun sırası
+timeout = 60  -- 60 saniye (1 dakika) zaman aşımı
+timer = nil  -- Zamanlayıcıyı saklamak için
 
 local function guid()
     local seed = { 'e', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f' }
@@ -132,6 +135,30 @@ local function calculatePoints(diceNumber, cardText, points)
     return points
 end
 
+local function startTimer()
+    if timer then
+        timer:stop()
+    end
+    timer = uv.new_timer()
+    timer:start(timeout * 1000, 0, function()
+        log("Turn skipped due to timeout")
+        skipTurn()
+    end)
+end
+
+local function skipTurn()
+    local nextTurn = getNextTurn()
+    ao.send({
+        Target = nextTurn,
+        Action = "YourTurn",
+        Data = "It's your turn now!"
+    })
+    startTimer()
+end
+
+-- Handler Functions
+
+-- Get All Rank List
 Handlers.add(
     "HandlerGetRank",
     Handlers.utils.hasMatchingTag("Action", "GetRank"),
@@ -172,6 +199,7 @@ Handlers.add(
     end
 )
 
+-- Get Current Points
 Handlers.add(
     "HandlerGetPoints",
     Handlers.utils.hasMatchingTag("Action", "GetPoints"),
@@ -187,6 +215,7 @@ Handlers.add(
     end
 )
 
+-- Finish Current Points
 Handlers.add(
     "HandlerFinishPoints",
     Handlers.utils.hasMatchingTag("Action", "FinishPoints"),
@@ -218,6 +247,7 @@ Handlers.add(
     end
 )
 
+-- Roll Dice and Draw Card
 Handlers.add(
     "HandlerRollDiceAndDrawCard",
     Handlers.utils.hasMatchingTag("Action", "RollDiceAndDrawCard"),
@@ -232,6 +262,10 @@ Handlers.add(
                 Data = "It's not your turn!"
             })
             return
+        end
+
+        if timer then
+            timer:stop()
         end
         
         local diceNumber = getDiceNumber()
@@ -256,9 +290,11 @@ Handlers.add(
             Action = "YourTurn",
             Data = "It's your turn now!"
         })
+        startTimer()
     end
 )
 
+-- Join Game
 Handlers.add(
     "HandlerJoinGame",
     Handlers.utils.hasMatchingTag("Action", "JoinGame"),
@@ -273,6 +309,7 @@ Handlers.add(
     end
 )
 
+-- Get All Members
 Handlers.add(
     "HandlerGetMembers",
     Handlers.utils.hasMatchingTag("Action", "GetMembers"),
